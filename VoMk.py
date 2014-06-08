@@ -5,19 +5,26 @@ import argparse
 import sys,os
 import re
 
+TKSRCFILES = 'LOCAL_SRC_FILES'
+TKLIBS = 'LOCAL_LDLIBS'
+TKINCLUDES = 'LOCAL_C_INCLUDES'
+TKSR = 'SVNROOT'
+
 class VoMK:
     '''this class is used to merge Android make files.
        first add several Android.mk files, then generate a merged one.'''
+
     def __init__(self):
         self.src_files = []
         self.libraries = []
         self.includes = []
+        self.SVNRoot = ''
 
     def add_mk(self, mkpath):
         '''add and parse a mk file, extract src file list and libraries'''
         mkroot=""
-        pairs = {'LOCAL_SRC_FILES':'','LOCAL_LDLIBS':'',
-                 'LOCAL_C_INCLUDES':''}
+        pairs = {TKSRCFILES:'', TKLIBS:'',
+                 TKINCLUDES:''}
 
         def parse():
             fp = open(mkpath)
@@ -37,8 +44,9 @@ class VoMK:
                     pairs[_token] = _value
             fp.close()
 
+
         def process():
-            _files = pairs['LOCAL_SRC_FILES'].split()
+            _files = pairs[TKSRCFILES].split()
             for _file in _files:
                 if _file.find('$(')>=0:
                     _var = _file[_file.find('$(')+2:_file.find(')')]
@@ -49,8 +57,10 @@ class VoMK:
                 _abspath = os.path.abspath(_relpath)
                 if not _abspath in self.src_files:
                     self.src_files.append(_abspath)
+                if _abspath.endswith('/Common/voLog.c'):
+                    self.SVNRoot = _abspath[:_abspath.find('/Common/voLog.c')] 
                     
-            _incs = pairs['LOCAL_C_INCLUDES'].split()
+            _incs = pairs[TKINCLUDES].split()
             for _inc in _incs:
                 if _inc.find('$(')>=0:
                     _var = _inc[_inc.find('$(')+2:_inc.find(')')]
@@ -62,7 +72,7 @@ class VoMK:
                 if not _abspath in self.includes:
                     self.includes.append(_abspath)
                     
-            _libs = pairs['LOCAL_LDLIBS'].split()
+            _libs = pairs[TKLIBS].split()
             for _lib in _libs:
                 if not _lib.endswith('.a'): continue
                 if _lib.find('$(')>=0:
@@ -80,11 +90,41 @@ class VoMK:
             parse()
             process()
 
+    def remove_svn_root(self):
+        _sr = self.SVNRoot + os.sep
+        _len = len(self.SVNRoot) +1
+        if _len < 2:
+            return
+        for _idx in range(0, len(self.src_files)):
+            if self.src_files[_idx].startswith(_sr):
+                self.src_files[_idx] = self.src_files[_idx][_len:]
+        for _idx in range(0, len(self.includes)):
+            if self.includes[_idx].startswith(_sr):
+                self.includes[_idx] = self.includes[_idx][_len:]
+        for _idx in range(0, len(self.libraries)):
+            if self.libraries[_idx].startswith(_sr):
+                self.libraries[_idx] = self.libraries[_idx][_len:]
+
+    def render(self):
+        _head = '''
+LOCAL_PATH := $(call my-dir)
+VOTOP?=../../../../../..
+
+include $(CLEAR_VARS)
+
+LOCAL_ARM_MODE := arm
+
+LOCAL_MODULE := libvoOnelib
+'''
+        _root = TKSR + ':=' + self.SVNRoot
+
+        
     def generate(self, out_path="./Android.mk"):
         '''generate a Android.mk with merged src files and libraries'''
         pass
 
     def printing(self):
+        print("SVNRoot:\n",self.SVNRoot)
         print("Src Files:")
         for item in self.src_files:
             print(item)
@@ -98,14 +138,21 @@ class VoMK:
 
 
 def main():
-    testp = "/cygdrive/d/_Works/main/Source/PushPD/Project/Linux/ndk/jni/Android.mk"
-    voMK = VoMK()
-    voMK.add_mk(testp)
+    t1 = "/cygdrive/d/_Works/main/Source/PushPD/Project/Linux/ndk/jni/Android.mk"
     t2 = "/cygdrive/d/_Works/main/Codec/Audio/DTS/ndk/v6/jni/Android.mk"
-    voMK.add_mk(t2)
     t3 = "/cygdrive/d/_Works/main/Utility/voVersion/prj/linux/ndk/v7/jni/Android.mk"
-    voMK.add_mk(t3)
+    voMK = VoMK()
+    voMK.add_mk(t1)
     voMK.printing()
+    #print()
+    voMK.add_mk(t2)
+    #voMK.printing()
+    #print()
+    voMK.add_mk(t3)
+    #voMK.printing()
+    voMK.remove_svn_root()
+    voMK.printing()
+    
 
 if __name__ == "__main__":
   main()
