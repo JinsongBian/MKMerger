@@ -4,11 +4,13 @@ from __future__ import print_function
 import argparse
 import sys,os
 import re
+from getproject_path import get_project_path
 
 TKSRCFILES = 'LOCAL_SRC_FILES'
 TKLIBS = 'LOCAL_LDLIBS'
 TKINCLUDES = 'LOCAL_C_INCLUDES'
-TKSR = 'SVNROOT'
+TKSR = 'SRCROOT'
+TKGOON = ' \\\n'
 
 class VoMK:
     '''this class is used to merge Android make files.
@@ -91,8 +93,8 @@ class VoMK:
             process()
 
     def remove_svn_root(self):
-        _sr = self.SVNRoot + os.sep
-        _len = len(self.SVNRoot) +1
+        _sr = self.SVNRoot+os.sep
+        _len = len(self.SVNRoot)+1
         if _len < 2:
             return
         for _idx in range(0, len(self.src_files)):
@@ -108,15 +110,44 @@ class VoMK:
     def render(self):
         _head = '''
 LOCAL_PATH := $(call my-dir)
-VOTOP?=../../../../../..
 
 include $(CLEAR_VARS)
 
 LOCAL_ARM_MODE := arm
 
 LOCAL_MODULE := libvoOnelib
+
 '''
-        _root = TKSR + ':=' + self.SVNRoot
+        _root = TKSR + ' := ' + self.SVNRoot +'\n\n'
+        _ref = '$('+ TKSR +')' + os.sep
+
+        _srcfiles = TKSRCFILES + ' :=' + TKGOON
+        for _item in self.src_files:
+            _srcfiles += '\t\t' + _ref + _item + TKGOON
+        _srcfiles += '\n'
+            
+        _incs = TKINCLUDES + ' :=' + TKGOON
+        for _item in self.includes:
+            _incs += '\t\t' + _ref + _item + TKGOON
+        _incs += '\n'
+
+        _mid = '''
+VOMM := -D__arm -D__VO_NDK__ -DLINUX -D_LINUX -D_LINUX_ANDROID -D_VOLOG_ERROR -D_VOLOG_INFO -D_VOLOG_WARNING
+
+# about info option, do not need to care it
+LOCAL_CFLAGS := -D_VOMODULEID=0x0a310000  -DNDEBUG -DARM -DARM_ASM -march=armv6j -mtune=arm1136jf-s -mfpu=vfp  -mfloat-abi=softfp -msoft-float -fsigned-char 
+
+'''
+        _libs = TKLIBS + ' := -llog -lvodl -L' + _ref + 'Lib/ndk ' + TKGOON
+        for _item in self.libraries:
+            _libs += '\t\t' + _ref + _item + TKGOON
+        _libs += '\n'
+        
+        _end = '''
+include $(SRCROOT)/build/vondk.mk
+include $(BUILD_SHARED_LIBRARY)
+'''
+        return _head + _root + _srcfiles + _incs + _mid + _libs + _end
 
         
     def generate(self, out_path="./Android.mk"):
@@ -138,12 +169,15 @@ LOCAL_MODULE := libvoOnelib
 
 
 def main():
-    t1 = "/cygdrive/d/_Works/main/Source/PushPD/Project/Linux/ndk/jni/Android.mk"
-    t2 = "/cygdrive/d/_Works/main/Codec/Audio/DTS/ndk/v6/jni/Android.mk"
-    t3 = "/cygdrive/d/_Works/main/Utility/voVersion/prj/linux/ndk/v7/jni/Android.mk"
+    tr = "/cygdrive/d/linux/voCode/main"
+    if not os.path.exists(tr):
+        tr = "/cygdrive/d/_Works/main"
+    t1 = tr + "/Source/PushPD/Project/Linux/ndk/jni/Android.mk"
+    t2 = tr + "/Codec/Audio/DTS/ndk/v6/jni/Android.mk"
+    t3 = tr + "/Utility/voVersion/prj/linux/ndk/v7/jni/Android.mk"
     voMK = VoMK()
     voMK.add_mk(t1)
-    voMK.printing()
+    #voMK.printing()
     #print()
     voMK.add_mk(t2)
     #voMK.printing()
@@ -151,7 +185,8 @@ def main():
     voMK.add_mk(t3)
     #voMK.printing()
     voMK.remove_svn_root()
-    voMK.printing()
+    print(voMK.render())
+#    voMK.printing()
     
 
 if __name__ == "__main__":
