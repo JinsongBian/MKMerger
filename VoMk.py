@@ -4,7 +4,8 @@ from __future__ import print_function
 import argparse
 import sys,os
 import re
-from getproject_path import get_project_path
+import string
+from get_project_path import get_project_path
 
 TKSRCFILES = 'LOCAL_SRC_FILES'
 TKLIBS = 'LOCAL_LDLIBS'
@@ -21,6 +22,7 @@ class VoMK:
         self.libraries = []
         self.includes = []
         self.SVNRoot = ''
+        self.replaced = False
 
     def add_mk(self, mkpath):
         '''add and parse a mk file, extract src file list and libraries'''
@@ -34,6 +36,7 @@ class VoMK:
                 line = fp.readline()
                 if not line: break
                 _line = line.strip()
+                if _line.startswith('#'): continue
                 _pos = _line.find(':=')
                 if _pos > 0:
                     _token = _line[:_pos].strip()
@@ -92,79 +95,92 @@ class VoMK:
             parse()
             process()
 
-    def remove_svn_root(self):
+
+    def render(self, name):
+
+        src_files = self.src_files
+        includes = self.includes
+        libraries = self.libraries
+
         _sr = self.SVNRoot+os.sep
         _len = len(self.SVNRoot)+1
-        if _len < 2:
-            return
-        for _idx in range(0, len(self.src_files)):
-            if self.src_files[_idx].startswith(_sr):
-                self.src_files[_idx] = self.src_files[_idx][_len:]
-        for _idx in range(0, len(self.includes)):
-            if self.includes[_idx].startswith(_sr):
-                self.includes[_idx] = self.includes[_idx][_len:]
-        for _idx in range(0, len(self.libraries)):
-            if self.libraries[_idx].startswith(_sr):
-                self.libraries[_idx] = self.libraries[_idx][_len:]
-
-    def render(self):
-        _head = '''
-LOCAL_PATH := $(call my-dir)
-
-include $(CLEAR_VARS)
-
-LOCAL_ARM_MODE := arm
-
-LOCAL_MODULE := libvoOnelib
-
-'''
+        for _idx in range(0, len(src_files)):
+            if src_files[_idx].startswith(_sr):
+                src_files[_idx] = src_files[_idx][_len:]
+        for _idx in range(0, len(includes)):
+            if includes[_idx].startswith(_sr):
+                includes[_idx] = includes[_idx][_len:]
+        for _idx in range(0, len(libraries)):
+            if libraries[_idx].startswith(_sr):
+                libraries[_idx] = libraries[_idx][_len:]
+        
         _root = TKSR + ' := ' + self.SVNRoot +'\n\n'
         _ref = '$('+ TKSR +')' + os.sep
 
         _srcfiles = TKSRCFILES + ' :=' + TKGOON
-        for _item in self.src_files:
+        for _item in src_files:
             _srcfiles += '\t\t' + _ref + _item + TKGOON
         _srcfiles += '\n'
             
         _incs = TKINCLUDES + ' :=' + TKGOON
-        for _item in self.includes:
+        for _item in includes:
             _incs += '\t\t' + _ref + _item + TKGOON
         _incs += '\n'
 
-        _mid = '''
+        _libs = TKLIBS + ' := -llog -lvodl -L' + _ref + 'Lib/ndk ' + TKGOON
+        for _item in libraries:
+            _libs += '\t\t' + _ref + _item + TKGOON
+        _libs += '\n'
+
+        _values ={'root':_root,
+                  'srcfiles':_srcfiles,
+                  'incs':_incs,
+                  'libs':_libs,
+                  'ref':_ref,
+                  'name':name
+                  }
+       
+        _text = string.Template("""
+LOCAL_PATH := $$(call my-dir)
+
+include $$(CLEAR_VARS)
+
+LOCAL_ARM_MODE := arm
+
+LOCAL_MODULE := ${name}
+
+${root}
+
+${srcfiles}
+
+${incs}
+
 VOMM := -D__arm -D__VO_NDK__ -DLINUX -D_LINUX -D_LINUX_ANDROID -D_VOLOG_ERROR -D_VOLOG_INFO -D_VOLOG_WARNING
+#VOMM:= -D__VO_NDK__ -D_VOLOG_INFO -DLINUX -D_LINUX -D_LINUX_ANDROID -DVOANDROID -DCONFIG_MULTITHREAD -DFILTER_LEVEL -DLICENSEFILE -DSTABILITY -DMULTITHREAD_STABILITY -DVOANDROID=1 
 
 # about info option, do not need to care it
 LOCAL_CFLAGS := -D_VOMODULEID=0x0a310000  -DNDEBUG -DARM -DARM_ASM -march=armv6j -mtune=arm1136jf-s -mfpu=vfp  -mfloat-abi=softfp -msoft-float -fsigned-char 
+#LOCAL_CFLAGS := -D_VOMODULEID=0x02010000   -DNDEBUG  -DARM -DVOARMV6 -mfloat-abi=softfp -march=armv6j -mtune=arm1136jf-s -mfpu=vfp -mthumb-interwork
 
-'''
-        _libs = TKLIBS + ' := -llog -lvodl -L' + _ref + 'Lib/ndk ' + TKGOON
-        for _item in self.libraries:
-            _libs += '\t\t' + _ref + _item + TKGOON
-        _libs += '\n'
-        
-        _end = '''
-include $(SRCROOT)/build/vondk.mk
-include $(BUILD_SHARED_LIBRARY)
-'''
-        return _head + _root + _srcfiles + _incs + _mid + _libs + _end
+${libs}
+
+include ${ref}build/vondk.mk
+include $$(BUILD_SHARED_LIBRARY)
+""")
+
+        return _text.substitute(_values)
 
         
     def generate(self, out_path="./Android.mk"):
         '''generate a Android.mk with merged src files and libraries'''
-        pass
-
-    def printing(self):
-        print("SVNRoot:\n",self.SVNRoot)
-        print("Src Files:")
-        for item in self.src_files:
-            print(item)
-        print("Includes:")
-        for item in self.includes:
-            print(item)
-        print("Libraries:")
-        for item in self.libraries:
-            print(item)
+        if os.path.exists(out_path):
+            os.remove(out_path)
+        _outfile = open (out_path,"w")
+        _outfile.write(self.render('libvoOnelib'))
+        _outfile.close()
+    
+    def print(self):
+        print(self.render('libvoOneLib'))
 
 
 
@@ -172,21 +188,21 @@ def main():
     tr = "/cygdrive/d/linux/voCode/main"
     if not os.path.exists(tr):
         tr = "/cygdrive/d/_Works/main"
-    t1 = tr + "/Source/PushPD/Project/Linux/ndk/jni/Android.mk"
-    t2 = tr + "/Codec/Audio/DTS/ndk/v6/jni/Android.mk"
-    t3 = tr + "/Utility/voVersion/prj/linux/ndk/v7/jni/Android.mk"
+    modules = [ #'voVersion',
+                #'voH264Dec',
+                'voAACDec',
+                #'libvompEngn',
+                #'libvoSourceIO'
+                ]
     voMK = VoMK()
-    voMK.add_mk(t1)
-    #voMK.printing()
-    #print()
-    voMK.add_mk(t2)
-    #voMK.printing()
-    #print()
-    voMK.add_mk(t3)
-    #voMK.printing()
-    voMK.remove_svn_root()
-    print(voMK.render())
-#    voMK.printing()
+    for module in modules:
+        pp = get_project_path(module,'a',tr)
+        print(module, pp)
+        t = os.path.join(tr,pp)
+        print (t)
+        voMK.add_mk(t)
+    voMK.print()
+
     
 
 if __name__ == "__main__":
