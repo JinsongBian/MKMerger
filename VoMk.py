@@ -30,6 +30,16 @@ class VoMK:
         pairs = {TKSRCFILES:'', TKLIBS:'',
                  TKINCLUDES:''}
 
+        def purify(value):
+            _value = value
+            start = 0
+            while _value.find('$(',start)>=0:
+                _var = _value[_value.find('$(')+2:_value.find(')')]
+                start = _value.find(')')
+                if not pairs.get(_var) == None:
+                    _value = _value.replace("$("+_var+")", pairs[_var])
+            return _value
+
         def parse():
             fp = open(mkpath)
             while True:
@@ -46,19 +56,14 @@ class VoMK:
                         _line = fp.readline()
                         if not _line: break
                         _value = _value + ' ' + _line.strip()
-                    pairs[_token] = _value
+                    pairs[_token] = purify(_value)
             fp.close()
 
 
         def process():
             _files = pairs[TKSRCFILES].split()
             for _file in _files:
-                if _file.find('$(')>=0:
-                    _var = _file[_file.find('$(')+2:_file.find(')')]
-                    _relpath = os.path.join(mkroot,
-                                    _file.replace("$("+_var+")", pairs[_var]))
-                else:
-                    _relpath = os.path.join(mkroot,_file)
+                _relpath = os.path.join(mkroot,_file)
                 _abspath = os.path.abspath(_relpath)
                 if not _abspath in self.src_files:
                     self.src_files.append(_abspath)
@@ -67,25 +72,17 @@ class VoMK:
                     
             _incs = pairs[TKINCLUDES].split()
             for _inc in _incs:
-                if _inc.find('$(')>=0:
-                    _var = _inc[_inc.find('$(')+2:_inc.find(')')]
-                    _relpath = os.path.join(mkroot,
-                                    _inc.replace("$("+_var+")", pairs[_var]))
-                else:
-                    _relpath = os.path.join(mkroot,_inc)
+                _relpath = os.path.join(mkroot,_inc)
                 _abspath = os.path.abspath(_relpath)
+                print(_relpath)
+                print(_abspath)
                 if not _abspath in self.includes:
                     self.includes.append(_abspath)
                     
             _libs = pairs[TKLIBS].split()
             for _lib in _libs:
                 if not _lib.endswith('.a'): continue
-                if _lib.find('$(')>=0:
-                    _var = _lib[_lib.find('$(')+2:_lib.find(')')]
-                    _relpath = os.path.join(mkroot,
-                                    _lib.replace("$("+_var+")", pairs[_var]))
-                else:
-                    _relpath = os.path.join(mkroot,_lib)
+                _relpath = os.path.join(mkroot,_lib)
                 _abspath = os.path.abspath(_relpath)
                 if not _abspath in self.libraries:
                     self.libraries.append(_abspath)
@@ -94,6 +91,8 @@ class VoMK:
             mkroot = os.path.dirname(mkpath)
             parse()
             process()
+            #for key in pairs.keys():
+            #    print(key,pairs[key])
 
 
     def render(self, name):
@@ -188,11 +187,11 @@ def main():
     tr = "/cygdrive/d/linux/voCode/main"
     if not os.path.exists(tr):
         tr = "/cygdrive/d/_Works/main"
-    modules = [ #'voVersion',
-                #'voH264Dec',
+    modules = [ 'voVersion',
+                'voH264Dec',
                 'voAACDec',
-                #'libvompEngn',
-                #'libvoSourceIO'
+                'libvompEngn',
+                'libvoSourceIO'
                 ]
     voMK = VoMK()
     for module in modules:

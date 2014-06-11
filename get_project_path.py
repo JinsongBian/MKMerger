@@ -42,7 +42,8 @@ def get_project_path(module, OSType, SVNRoot='/'):
     if len(items)>OSORDER[OSType]:
         path = items[OSORDER[OSType]].text
         if len(path)>8:
-            return(path)
+            _newpath = path.replace("\\",os.sep)
+            return(_newpath.replace("\/",os.sep))
     return ""
 
 def main():
